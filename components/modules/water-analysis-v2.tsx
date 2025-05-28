@@ -1,10 +1,11 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
-import { Droplets, TrendingUp, AlertTriangle, Activity, BarChart3 } from "lucide-react"
+import { Droplets, TrendingUp, AlertTriangle, BarChart3, Download } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { 
   LineChart, 
   Line, 
@@ -17,7 +18,7 @@ import {
   Bar,
   PieChart,
   Pie,
-  Cell 
+  Cell
 } from "recharts"
 import { 
   MetricCard, 
@@ -27,31 +28,45 @@ import {
   LoadingSkeleton,
   EmptyState 
 } from "@/components/shared"
+import { useSearchAndFilter, useSorting, usePagination } from "@/hooks"
+import { DashboardMetric } from "@/lib/types"
+import { WaterConsumptionData, ZoneAnalytics, WATER_ZONE_CONFIGS } from "@/lib/types/water-analysis"
 import { 
-  useSearchAndFilter, 
-  useSorting,
-  useNotifications 
-} from "@/hooks"
-import { WaterAnalysisData, DashboardMetric, ZoneAlert } from "@/lib/types"
+  parseWaterConsumptionData, 
+  filterWaterData, 
+  calculateZoneAnalytics,
+  getConsumptionChartData,
+  getTopConsumers,
+  exportWaterDataToCSV
+} from "@/lib/utils/water-analysis"
 import { COLORS } from "@/lib/constants"
-import { 
-  WATER_ZONE_DATA, 
-  ZONE_CONSUMPTION_TRENDS, 
-  ZONE_PERFORMANCE_METRICS,
-  MONTHLY_ZONE_AGGREGATE,
-  ZONE_ALERTS 
-} from "@/lib/water-zone-data"
 
 interface WaterAnalysisProps {
   isDarkMode?: boolean
 }
 
-export const WaterAnalysisModule: React.FC<WaterAnalysisProps> = ({ isDarkMode = false }) => {
-  const [activeTab, setActiveTab] = useState("overview")
-  const { addNotification } = useNotifications()
+// Mock data - In production, this would come from your API/CSV files
+const mockWaterData = [
+  // This is where you would load your actual CSV data
+  // For now, I'll create some sample data matching your structure
+]
 
-  // Water zone data (Zone Bulks only - 4300336 & 4300338 excluded)
-  const waterZoneData = WATER_ZONE_DATA
+export const WaterAnalysisModuleV2: React.FC<WaterAnalysisProps> = ({ isDarkMode = false }) => {
+  const [activeTab, setActiveTab] = useState("overview")
+  const [selectedZone, setSelectedZone] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  // Process water consumption data
+  const processedData = useMemo(() => {
+    // In production, replace mockWaterData with actual CSV data
+    const parsed = parseWaterConsumptionData(mockWaterData)
+    return filterWaterData(parsed)
+  }, [])
+
+  // Calculate zone analytics
+  const zoneAnalytics = useMemo(() => {
+    return calculateZoneAnalytics(processedData)
+  }, [processedData])
 
   // Search and filtering
   const {
@@ -60,421 +75,416 @@ export const WaterAnalysisModule: React.FC<WaterAnalysisProps> = ({ isDarkMode =
     filters,
     setFilter,
     filteredData
-  } = useSearchAndFilter(waterZoneData, ['meterLabel', 'zone', 'location'], {
-    status: (item, value) => item.status === value,
-    zone: (item, value) => item.zone.toLowerCase().includes(value.toLowerCase())
+  } = useSearchAndFilter(processedData, ['meterLabel', 'zone'], {
+    zone: (item, value) => item.zone.toLowerCase().includes(value.toLowerCase()),
+    type: (item, value) => item.type === value,
+    status: (item, value) => item.status === value
   })
 
   // Sorting
-  const { sortedData, sortField, sortOrder, toggleSort } = useSorting(filteredData, {
+  const { sortedData, toggleSort } = useSorting(filteredData, {
     field: 'totalConsumption',
     order: 'desc'
   })
 
-  // Calculate metrics for Zone Bulks
+  // Pagination
+  const { paginatedData, paginationInfo, goToPage } = usePagination(sortedData, 'water')
+
+  // Calculate overview metrics
   const metrics: DashboardMetric[] = useMemo(() => {
-    const totalConsumption = waterZoneData.reduce((sum, zone) => sum + zone.totalConsumption, 0)
-    const averageConsumption = totalConsumption / waterZoneData.length
-    const criticalZones = waterZoneData.filter(zone => zone.status === 'critical').length
-    const activeZones = waterZoneData.filter(zone => zone.status === 'operational').length
+    if (!processedData.length) return []
+
+    const totalConsumption = processedData.reduce((sum, item) => sum + item.totalConsumption, 0)
+    const avgMonthly = totalConsumption / 16 // 16 months of data
+    const activeZones = zoneAnalytics.length
+    const criticalAlerts = processedData.filter(item => item.status === 'critical').length
 
     return [
       {
         id: 'total-consumption',
-        title: 'Total Zone Consumption',
-        value: totalConsumption.toLocaleString(),
+        title: 'Total Water Consumption',
+        value: totalConsumption.toFixed(0),
         unit: 'm³',
         icon: 'Droplets',
         color: COLORS.info,
-        change: 12.3,
+        change: 8.3,
         changeType: 'increase'
       },
       {
-        id: 'active-zones',
-        title: 'Active Zone Bulks',
-        value: activeZones,
-        unit: 'zones',
-        icon: 'Activity',
+        id: 'average-monthly',
+        title: 'Average Monthly Usage',
+        value: avgMonthly.toFixed(0),
+        unit: 'm³',
+        icon: 'BarChart3',
         color: COLORS.success
       },
       {
-        id: 'average-consumption',
-        title: 'Average Zone Consumption',
-        value: Math.round(averageConsumption).toLocaleString(),
-        unit: 'm³',
-        icon: 'BarChart3',
-        color: COLORS.primary,
-        change: -2.1,
-        changeType: 'decrease'
+        id: 'active-zones',
+        title: 'Active Zones',
+        value: activeZones,
+        icon: 'TrendingUp',
+        color: COLORS.primary
       },
       {
         id: 'critical-alerts',
         title: 'Critical Alerts',
-        value: ZONE_ALERTS.filter(alert => alert.type === 'critical' && !alert.resolved).length,
+        value: criticalAlerts,
         icon: 'AlertTriangle',
         color: COLORS.error
       }
     ]
-  }, [waterZoneData])
+  }, [processedData, zoneAnalytics])
 
-  // Chart data for zone consumption trends
-  const trendChartData = useMemo(() => {
-    return MONTHLY_ZONE_AGGREGATE.map(item => ({
-      month: item.month,
-      consumption: item.total,
-      zones: item.zones
-    }))
-  }, [])
+  // Chart data
+  const chartData = useMemo(() => {
+    return getConsumptionChartData(processedData, selectedZone || undefined)
+  }, [processedData, selectedZone])
 
-  // Zone comparison data
-  const zoneComparisonData = useMemo(() => {
-    return waterZoneData.map(zone => ({
-      name: zone.location.replace('Zone ', 'Z'),
-      consumption: zone.totalConsumption,
-      average: zone.averageMonthly
-    })).sort((a, b) => b.consumption - a.consumption)
-  }, [waterZoneData])
+  // Handle export
+  const handleExport = () => {
+    const csvContent = exportWaterDataToCSV(filteredData)
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `water-analysis-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
-  const pieChartColors = [COLORS.primary, COLORS.info, COLORS.success, COLORS.warning, COLORS.error, COLORS.teal]
-
-  // Zone status distribution
-  const statusDistribution = useMemo(() => {
-    const distribution = waterZoneData.reduce((acc, zone) => {
-      acc[zone.status] = (acc[zone.status] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-
-    return Object.entries(distribution).map(([status, count], index) => ({
-      name: status.charAt(0).toUpperCase() + status.slice(1),
-      value: count,
-      color: pieChartColors[index]
-    }))
-  }, [waterZoneData])
-
-  const renderZoneDetailsTable = () => (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
-            <th className="text-left p-3 font-semibold">Zone</th>
-            <th className="text-left p-3 font-semibold">Meter Label</th>
-            <th className="text-left p-3 font-semibold">Total Consumption (m³)</th>
-            <th className="text-left p-3 font-semibold">Monthly Average (m³)</th>
-            <th className="text-left p-3 font-semibold">Current Status</th>
-            <th className="text-left p-3 font-semibold">Trend</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedData.map((zone) => {
-            const trend = ZONE_CONSUMPTION_TRENDS.find(t => t.zone === zone.location)
-            return (
-              <tr 
-                key={zone.id} 
-                className={`border-b ${isDarkMode ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-200 hover:bg-slate-50'} transition-colors`}
-              >
-                <td className="p-3 font-medium">{zone.location}</td>
-                <td className="p-3 text-sm">{zone.meterLabel}</td>
-                <td className="p-3 font-mono text-right">{zone.totalConsumption.toLocaleString()}</td>
-                <td className="p-3 font-mono text-right">{Math.round(zone.averageMonthly).toLocaleString()}</td>
-                <td className="p-3">
-                  <StatusBadge status={zone.status} />
-                </td>
-                <td className="p-3">
-                  <Badge 
-                    variant={
-                      trend?.trend === 'increasing' ? 'destructive' :
-                      trend?.trend === 'decreasing' ? 'success' :
-                      trend?.trend === 'critical' ? 'destructive' : 'default'
-                    }
-                    className="text-xs"
-                  >
-                    {trend?.trend || 'stable'}
-                  </Badge>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
+  if (loading) {
+    return <LoadingSkeleton type="card" count={4} isDarkMode={isDarkMode} />
+  }
 
   return (
     <div className="space-y-6">
-      {/* Module Header with Metrics */}
+      {/* Module Header */}
       <ModuleHeader
         title="Water Analysis - Zone Details"
-        description="Zone bulk water consumption monitoring and analysis (Entries 4300336 & 4300338 excluded)"
+        description="Water consumption monitoring and analysis by zones (Excluding meters 4300336 & 4300338)"
         metrics={metrics}
         isDarkMode={isDarkMode}
         actions={
           <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="text-xs">
-              {ZONE_PERFORMANCE_METRICS.totalZones} Zone Bulks
-            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={!filteredData.length}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export Data
+            </Button>
           </div>
         }
       />
-
-      {/* Active Alerts */}
-      {ZONE_ALERTS.filter(alert => !alert.resolved).length > 0 && (
-        <Card className={`border-l-4 border-l-orange-500 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-orange-50 border-orange-200'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="text-orange-500 mt-1" size={20} />
-              <div>
-                <h4 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Active Zone Alerts
-                </h4>
-                <div className="mt-2 space-y-1">
-                  {ZONE_ALERTS.filter(alert => !alert.resolved).map(alert => (
-                    <p key={alert.id} className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      <span className="font-medium">{alert.zone}:</span> {alert.message}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Filter Bar */}
       <FilterBar
         searchValue={searchTerm}
         onSearchChange={setSearchTerm}
         filters={[
-          { id: 'status', label: 'Status', value: '' },
-          { id: 'zone', label: 'Zone', value: '' }
+          { id: 'zone', label: 'Zone', value: '' },
+          { id: 'type', label: 'Type', value: '' },
+          { id: 'status', label: 'Status', value: '' }
         ]}
         selectedFilters={Object.entries(filters).map(([k, v]) => `${k}:${v}`)}
         onFilterChange={setFilter}
-        onExport={() => console.log('Export zone data')}
         isDarkMode={isDarkMode}
       />
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="zones">Zone Details</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="overview">Zone Overview</TabsTrigger>
+          <TabsTrigger value="consumption">Consumption Analysis</TabsTrigger>
+          <TabsTrigger value="details">Zone Details</TabsTrigger>
+          <TabsTrigger value="trends">Trends & Analytics</TabsTrigger>
         </TabsList>
 
+        {/* Zone Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {/* Zone Analytics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {zoneAnalytics.map((zone) => {
+              const zoneConfig = Object.values(WATER_ZONE_CONFIGS).find(
+                config => config.id === zone.zoneId
+              )
+              
+              return (
+                <Card 
+                  key={zone.zoneId}
+                  className={`p-6 cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                    isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                  } ${selectedZone === zone.zoneId ? 'ring-2 ring-blue-500' : ''}`}
+                  onClick={() => setSelectedZone(selectedZone === zone.zoneId ? null : zone.zoneId)}
+                  style={{ borderLeft: `4px solid ${zoneConfig?.color || COLORS.primary}` }}
+                >
+                  <CardContent className="p-0">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {zone.zoneName}
+                      </h3>
+                      <Badge variant={zone.efficiency > 80 ? 'default' : 'destructive'}>
+                        {zone.efficiency.toFixed(0)}% Efficiency
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                          Total Consumption:
+                        </span>
+                        <span className="font-medium">{zone.totalConsumption.toFixed(0)} m³</span>
+                      </div>
+                      
+                      <div className="flex justify-between">
+                        <span className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                          Active Meters:
+                        </span>
+                        <span className="font-medium">{zone.meterCount}</span>
+                      </div>
+                      
+                      <div className="flex justify-between">
+                        <span className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                          Trend:
+                        </span>
+                        <StatusBadge status={zone.trend} />
+                      </div>
+                      
+                      {zone.highConsumers > 0 && (
+                        <div className="flex justify-between">
+                          <span className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                            High Consumers:
+                          </span>
+                          <span className="font-medium text-orange-500">{zone.highConsumers}</span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Consumption Chart */}
+          <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
+            <CardHeader>
+              <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
+                {selectedZone 
+                  ? `${zoneAnalytics.find(z => z.zoneId === selectedZone)?.zoneName} Consumption Trend`
+                  : 'Overall Water Consumption Trend'
+                }
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line 
+                    type="monotone" 
+                    dataKey="consumption" 
+                    stroke={COLORS.info} 
+                    strokeWidth={2}
+                    name="Consumption (m³)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Consumption Analysis Tab */}
+        <TabsContent value="consumption" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Consumption Trends Chart */}
+            {/* Zone Distribution */}
             <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
               <CardHeader>
                 <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                  Monthly Zone Consumption Trends
+                  Consumption by Zone
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={trendChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
+                  <PieChart>
+                    <Pie
+                      data={zoneAnalytics}
+                      dataKey="totalConsumption"
+                      nameKey="zoneName"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {zoneAnalytics.map((entry, index) => {
+                        const zoneConfig = Object.values(WATER_ZONE_CONFIGS).find(
+                          config => config.id === entry.zoneId
+                        )
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={zoneConfig?.color || COLORS.chart[index % COLORS.chart.length]} 
+                          />
+                        )
+                      })}
+                    </Pie>
                     <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="consumption" 
-                      stroke={COLORS.info} 
-                      strokeWidth={3}
-                      name="Total Consumption (m³)"
-                    />
-                  </LineChart>
+                  </PieChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
-            {/* Zone Comparison Chart */}
+            {/* Monthly Comparison */}
             <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
               <CardHeader>
                 <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                  Zone Consumption Comparison
+                  2024 vs 2025 Comparison
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={zoneComparisonData}>
+                  <BarChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
+                    <XAxis dataKey="month" />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="consumption" fill={COLORS.primary} name="Total Consumption (m³)" />
+                    <Bar dataKey="consumption" fill={COLORS.info} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>
-
-          {/* Zone Status Distribution */}
-          <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
-            <CardHeader>
-              <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                Zone Status Distribution
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center">
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie
-                      data={statusDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {statusDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        <TabsContent value="zones" className="space-y-6">
+        {/* Zone Details Tab */}
+        <TabsContent value="details" className="space-y-6">
           <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
             <CardHeader>
               <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                Zone Bulk Details
-              </CardTitle>
-              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                Comprehensive view of all zone bulk meters (excluding entries 4300336 & 4300338)
-              </p>
-            </CardHeader>
-            <CardContent>
-              {renderZoneDetailsTable()}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="trends" className="space-y-6">
-          <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
-            <CardHeader>
-              <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                Zone Consumption Trends Analysis
+                Water Consumption Details
+                {filteredData.length > 0 && (
+                  <span className="text-sm font-normal ml-2">
+                    ({filteredData.length} meters, excluding 4300336 & 4300338)
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {ZONE_CONSUMPTION_TRENDS.map((trend, index) => (
-                  <div 
-                    key={trend.zone}
-                    className={`p-4 rounded-lg border ${isDarkMode ? 'bg-slate-900 border-slate-600' : 'bg-slate-50 border-slate-200'}`}
-                  >
-                    <h4 className={`font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                      {trend.zone}
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Jan '24:</span>
-                        <span className="font-mono">{trend.jan24.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Current:</span>
-                        <span className="font-mono">{trend.current.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>Trend:</span>
-                        <Badge 
-                          variant={
-                            trend.trend === 'increasing' ? 'destructive' :
-                            trend.trend === 'decreasing' ? 'success' :
-                            trend.trend === 'critical' ? 'destructive' : 'default'
-                          }
-                          className="text-xs"
+              {filteredData.length === 0 ? (
+                <EmptyState
+                  icon={Droplets}
+                  title="No Water Data"
+                  description="No water consumption data matches your current filters."
+                  isDarkMode={isDarkMode}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                        <th className="text-left p-2 cursor-pointer" onClick={() => toggleSort('meterLabel')}>
+                          Meter Label
+                        </th>
+                        <th className="text-left p-2">Account #</th>
+                        <th className="text-left p-2 cursor-pointer" onClick={() => toggleSort('zone')}>
+                          Zone
+                        </th>
+                        <th className="text-left p-2">Type</th>
+                        <th className="text-left p-2 cursor-pointer" onClick={() => toggleSort('totalConsumption')}>
+                          Total (m³)
+                        </th>
+                        <th className="text-left p-2 cursor-pointer" onClick={() => toggleSort('averageMonthly')}>
+                          Avg Monthly
+                        </th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-left p-2">Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedData.map((item) => (
+                        <tr 
+                          key={item.acctNumber} 
+                          className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} hover:bg-slate-50 dark:hover:bg-slate-700`}
                         >
-                          {trend.trend}
-                        </Badge>
+                          <td className="p-2 font-medium">{item.meterLabel}</td>
+                          <td className="p-2 text-sm">{item.acctNumber}</td>
+                          <td className="p-2">
+                            <Badge variant="outline" style={{ 
+                              borderColor: Object.values(WATER_ZONE_CONFIGS).find(z => z.name === item.zone)?.color 
+                            }}>
+                              {Object.values(WATER_ZONE_CONFIGS).find(z => z.name === item.zone)?.displayName || item.zone}
+                            </Badge>
+                          </td>
+                          <td className="p-2 text-sm">{item.type}</td>
+                          <td className="p-2 font-medium">{item.totalConsumption.toFixed(0)}</td>
+                          <td className="p-2">{item.averageMonthly.toFixed(1)}</td>
+                          <td className="p-2">
+                            <StatusBadge status={item.status} />
+                          </td>
+                          <td className="p-2">
+                            <StatusBadge status={item.trend} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Pagination */}
+                  {paginationInfo.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4">
+                      <span className="text-sm text-slate-600">
+                        Showing {paginationInfo.currentPage} of {paginationInfo.totalPages} pages
+                        ({paginationInfo.totalItems} total items)
+                      </span>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToPage(paginationInfo.currentPage - 1)}
+                          disabled={paginationInfo.currentPage === 1}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => goToPage(paginationInfo.currentPage + 1)}
+                          disabled={paginationInfo.currentPage === paginationInfo.totalPages}
+                        >
+                          Next
+                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="analysis" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
-              <CardHeader>
-                <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                  Performance Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>Total Zones:</span>
-                    <span className="font-semibold">{ZONE_PERFORMANCE_METRICS.totalZones}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>Total Consumption:</span>
-                    <span className="font-semibold">{ZONE_PERFORMANCE_METRICS.totalConsumption.toLocaleString()} m³</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>Highest Consumer:</span>
-                    <span className="font-semibold">{ZONE_PERFORMANCE_METRICS.highestConsumer}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>Lowest Consumer:</span>
-                    <span className="font-semibold">{ZONE_PERFORMANCE_METRICS.lowestConsumer}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>Critical Zones:</span>
-                    <span className="font-semibold text-red-500">{ZONE_PERFORMANCE_METRICS.criticalZones.length}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
-              <CardHeader>
-                <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
-                  Key Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`}>
-                    <h4 className="font-semibold text-blue-600 mb-1">Zone 5 Performance</h4>
-                    <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      Highest consuming zone with variable consumption patterns
-                    </p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'}`}>
-                    <h4 className="font-semibold text-red-600 mb-1">Village Square Alert</h4>
-                    <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      Zero consumption detected - requires immediate attention
-                    </p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-yellow-900/20 border border-yellow-800' : 'bg-yellow-50 border border-yellow-200'}`}>
-                    <h4 className="font-semibold text-yellow-600 mb-1">Zone 3A Growth</h4>
-                    <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                      227% consumption increase since Jan '24
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Trends & Analytics Tab */}
+        <TabsContent value="trends">
+          <Card className={isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}>
+            <CardHeader>
+              <CardTitle className={isDarkMode ? 'text-white' : 'text-slate-900'}>
+                Advanced Analytics & Trends
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">
+                <p className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>
+                  Advanced analytics and predictive insights coming soon...
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
   )
 }
 
-export default WaterAnalysisModule
+export default WaterAnalysisModuleV2
