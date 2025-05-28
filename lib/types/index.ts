@@ -100,6 +100,42 @@ export interface WaterQualityData {
   compliance: boolean
 }
 
+export interface WaterAnalysisData {
+  id: string
+  meterLabel: string
+  accountNumber: string
+  zone: string
+  type: string
+  parentMeter: string
+  label: string
+  monthlyReadings: Record<string, number>
+  totalConsumption: number
+  averageMonthly: number
+  status: 'operational' | 'maintenance' | 'critical' | 'offline'
+  location: string
+  category: string
+  alerts?: ZoneAlert[]
+}
+
+export interface ZoneAlert {
+  id: string
+  zone: string
+  type: 'info' | 'warning' | 'critical'
+  message: string
+  timestamp: Date
+  resolved: boolean
+}
+
+export interface ZoneConsumptionTrend {
+  zone: string
+  jan24: number
+  feb24: number
+  mar24: number
+  apr24: number
+  current: number
+  trend: 'increasing' | 'decreasing' | 'stable' | 'variable' | 'critical'
+}
+
 export interface STPData {
   id: string
   plantId: string
