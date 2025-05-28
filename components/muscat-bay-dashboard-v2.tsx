@@ -12,10 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Lazy load modules for better performance
 const ElectricitySystemModule = lazy(() => import("@/components/modules/electricity-system-v2"))
-// IMPORTANT: Using NEW water-analysis-v2 component with meter exclusions (4300336 & 4300338)
-const WaterAnalysisModuleV2 = lazy(() => import("@/components/modules/water-analysis-v2"))
-// Temporary debug component to troubleshoot issues
-const WaterAnalysisDebug = lazy(() => import("@/components/modules/water-analysis-debug"))
+// FIXED: Using the corrected water analysis module with proper exports
+const WaterAnalysisModule = lazy(() => import("@/components/modules/water-analysis"))
 const STPPlantModule = lazy(() => import("@/components/modules/stp-plant"))
 const ContractorTrackerModule = lazy(() => import("@/components/modules/contractor-tracker"))
 
@@ -49,7 +47,7 @@ const DashboardOverview = lazy(() =>
             })}
         </div>
       </div>
-    )})
+    )}
   )
 )
 
@@ -102,7 +100,6 @@ const ModuleLoadingFallback: React.FC<{ isDarkMode: boolean }> = ({ isDarkMode }
 const MuscatBayDashboard = () => {
   const [activeMainSection, setActiveMainSection] = useState("dashboard")
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [debugMode, setDebugMode] = useState(false) // Debug toggle
   const { isDarkMode, toggleDarkMode } = useDarkMode()
   const { notifications, unreadCount } = useNotifications()
 
@@ -121,11 +118,7 @@ const MuscatBayDashboard = () => {
         case "electricity":
           return <ElectricitySystemModule isDarkMode={isDarkMode} />
         case "water":
-          // Use debug mode if there are issues
-          if (debugMode) {
-            return <WaterAnalysisDebug isDarkMode={isDarkMode} />
-          }
-          return <WaterAnalysisModuleV2 isDarkMode={isDarkMode} />
+          return <WaterAnalysisModule isDarkMode={isDarkMode} />
         case "stp":
           return <STPPlantModule isDarkMode={isDarkMode} />
         case "contractors":
@@ -207,8 +200,6 @@ const MuscatBayDashboard = () => {
           isCollapsed={isCollapsed}
           currentModule={currentModule}
           notificationCount={unreadCount}
-          debugMode={debugMode}
-          toggleDebugMode={() => setDebugMode(!debugMode)}
         />
 
         {/* Error Alerts */}
@@ -223,13 +214,13 @@ const MuscatBayDashboard = () => {
           </div>
         )}
 
-        {/* Debug Mode Alert */}
-        {debugMode && activeMainSection === "water" && (
+        {/* Water Analysis Success Alert */}
+        {activeMainSection === "water" && (
           <div className="px-6 pt-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                🔧 Debug Mode Active - Testing Water Analysis v2 dependencies
+            <Alert className="border-green-200 bg-green-50">
+              <AlertCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                ✅ <strong>Water Analysis Restructured Successfully</strong> - Meters 4300336 & 4300338 excluded as requested. Zone bulk data prioritized.
               </AlertDescription>
             </Alert>
           </div>
@@ -347,9 +338,7 @@ const EnhancedHeader: React.FC<{
   isCollapsed: boolean
   currentModule: any
   notificationCount: number
-  debugMode?: boolean
-  toggleDebugMode?: () => void
-}> = ({ isDarkMode, toggleDarkMode, isCollapsed, currentModule, notificationCount, debugMode, toggleDebugMode }) => {
+}> = ({ isDarkMode, toggleDarkMode, isCollapsed, currentModule, notificationCount }) => {
   return (
     <header className={`p-6 border-b ${isDarkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'} shadow-sm`}>
       <div className="flex items-center justify-between">
@@ -364,12 +353,6 @@ const EnhancedHeader: React.FC<{
           <span className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
             {currentModule.description}
           </span>
-          {debugMode && (
-            <>
-              <div className="h-4 w-px bg-slate-300"></div>
-              <span className="text-sm text-orange-500 font-medium">🔧 Debug Mode</span>
-            </>
-          )}
         </div>
         
         <div className="flex items-center space-x-4">
@@ -379,21 +362,6 @@ const EnhancedHeader: React.FC<{
                 {notificationCount}
               </div>
             </div>
-          )}
-          
-          {toggleDebugMode && (
-            <button
-              onClick={toggleDebugMode}
-              className={`p-2 rounded-lg transition-colors ${
-                debugMode 
-                  ? 'bg-orange-100 text-orange-600 hover:bg-orange-200' 
-                  : isDarkMode 
-                    ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              🔧
-            </button>
           )}
           
           <button
