@@ -1,12 +1,50 @@
 {
-  "name": "my-v0-project",
-  "version": "0.1.0",
+  "name": "muscat-bay-assets-operations",
+  "version": "1.0.0",
+  "description": "Muscat Bay Assets & Operations Management System with comprehensive electricity database",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    
+    "db:migrate": "tsx scripts/electricity-migration.ts migrate",
+    "db:rollback": "tsx scripts/electricity-migration.ts rollback",
+    "db:schema": "tsx scripts/electricity-migration.ts schema",
+    "db:import": "tsx scripts/electricity-migration.ts import",
+    "db:validate": "tsx scripts/electricity-migration.ts validate",
+    "db:indexes": "tsx scripts/electricity-migration.ts indexes",
+    "db:stats": "tsx scripts/electricity-migration.ts stats",
+    "db:backup": "tsx scripts/backup-electricity-data.ts",
+    "db:seed": "tsx scripts/seed-database.ts",
+    
+    "migrate": "npm run db:migrate",
+    "migrate:rollback": "npm run db:rollback",
+    "migrate:fresh": "npm run db:rollback && npm run db:migrate",
+    
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:db": "jest tests/database",
+    "test:services": "jest tests/services",
+    
+    "validate:data": "tsx scripts/validate-electricity-data.ts",
+    "analyze:consumption": "tsx scripts/analyze-consumption.ts",
+    "export:csv": "tsx scripts/export-electricity-csv.ts",
+    "export:json": "tsx scripts/export-electricity-json.ts",
+    
+    "docs:generate": "typedoc --out docs lib/",
+    "docs:serve": "cd docs && python -m http.server 8080",
+    
+    "clean": "rm -rf .next dist docs coverage",
+    "fresh": "npm run clean && npm install && npm run db:migrate",
+    
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "eslint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "eslint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -57,14 +95,93 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    
+    "mysql2": "^3.11.4",
+    "sqlite3": "^5.1.7",
+    "pg": "^8.12.0",
+    "csv-parser": "^3.0.0",
+    "csv-writer": "^1.6.0",
+    "papaparse": "^5.4.1",
+    "lodash": "^4.17.21",
+    "uuid": "^10.0.0",
+    "joi": "^17.13.3"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/jest": "^29.5.13",
+    "@types/lodash": "^4.17.12",
+    "@types/papaparse": "^5.3.14",
+    "@types/uuid": "^10.0.0",
+    "@types/pg": "^8.11.10",
+    "@types/mysql": "^2.15.26",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsx": "^4.19.2",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "prettier": "^3.3.3",
+    "eslint": "^8",
+    "eslint-config-next": "15.2.4",
+    "eslint-config-prettier": "^9.1.0",
+    "typedoc": "^0.26.10",
+    "@jest/globals": "^29.7.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.ts"],
+    "testMatch": ["**/__tests__/**/*.test.ts", "**/tests/**/*.test.ts"],
+    "collectCoverageFrom": [
+      "lib/**/*.ts",
+      "!lib/**/*.d.ts",
+      "!lib/**/index.ts"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["text", "lcov", "html"]
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false
+  },
+  "eslintConfig": {
+    "extends": ["next/core-web-vitals", "prettier"],
+    "rules": {
+      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-explicit-any": "warn"
+    }
+  },
+  "keywords": [
+    "muscat-bay",
+    "electricity",
+    "consumption",
+    "database",
+    "operations",
+    "analytics",
+    "dashboard",
+    "typescript",
+    "nextjs",
+    "react"
+  ],
+  "author": "Muscat Bay Development Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ARahim900/MBay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ARahim900/MBay/issues"
+  },
+  "homepage": "https://github.com/ARahim900/MBay#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }
