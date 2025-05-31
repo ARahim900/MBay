@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
-import { ElectricitySystemModule } from '@/components/modules/electricity-system-v2';
+import { ElectricitySystemModule } from '@/components/modules/electricity-system-v3';
 import { WaterAnalysisModule } from '@/components/modules/water-analysis-v2';
 import { STPPlantModule } from '@/components/modules/stp-plant';
 import { ContractorTrackerModule } from '@/components/modules/contractor-tracker';
