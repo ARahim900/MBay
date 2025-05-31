@@ -1,38 +1,48 @@
-"use client"
+'use client';
 
-import type React from "react"
-import { Zap, Droplets, Combine, UserCheck, Power, Menu } from "lucide-react"
-import { COLORS } from "@/lib/constants"
+import React from 'react';
+import { Power, Menu, Zap, Droplets, Combine, UserCheck } from 'lucide-react';
+import { COLORS, MAIN_SECTIONS } from '@/lib/constants';
+import { cn } from '@/lib/utils';
+
+// ===============================
+// SIDEBAR COMPONENT
+// ===============================
 
 interface SidebarProps {
-  activeMainSection: string
-  setActiveMainSection: (section: string) => void
-  isCollapsed: boolean
-  toggleSidebar: () => void
-  isDarkMode: boolean
+  activeMainSection: string;
+  setActiveMainSection: (section: string) => void;
+  isCollapsed: boolean;
+  toggleSidebar: () => void;
+  isDarkMode: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  activeMainSection,
-  setActiveMainSection,
-  isCollapsed,
-  toggleSidebar,
-  isDarkMode,
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  activeMainSection, 
+  setActiveMainSection, 
+  isCollapsed, 
+  toggleSidebar, 
+  isDarkMode 
 }) => {
-  const mainSections = [
-    { name: "Electricity System", icon: Zap, sectionId: "ElectricitySystem" },
-    { name: "Water Analysis", icon: Droplets, sectionId: "WaterAnalysis" },
-    { name: "STP Plant", icon: Combine, sectionId: "STPPlant" },
-    { name: "Contractor Tracker", icon: UserCheck, sectionId: "ContractorTracker" },
-  ]
-
-  const sidebarBg = isDarkMode ? COLORS.navy : COLORS.primary
-  const hoverBg = isDarkMode ? COLORS.navyLight : COLORS.primaryLight
+  const getIcon = (iconName: string) => {
+    const iconMap = {
+      Zap,
+      Droplets,
+      Combine,
+      UserCheck,
+    };
+    return iconMap[iconName as keyof typeof iconMap] || Zap;
+  };
 
   return (
-    <div
-      className={`${isCollapsed ? "w-16" : "w-64"} text-slate-100 p-5 space-y-8 min-h-screen shadow-2xl print:hidden transition-all duration-300 ease-in-out relative`}
-      style={{ backgroundColor: sidebarBg }}
+    <div 
+      className={cn(
+        "text-slate-100 p-5 space-y-8 min-h-screen shadow-2xl print:hidden transition-all duration-300 ease-in-out relative",
+        isCollapsed ? 'w-16' : 'w-64'
+      )} 
+      style={{
+        backgroundColor: isDarkMode ? '#1e1e2e' : COLORS.primaryDark
+      }}
     >
       {/* Toggle Button */}
       <button
@@ -44,74 +54,77 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </button>
 
       {/* Logo */}
-      <div className={`flex items-center space-x-3 text-white ${isCollapsed ? "justify-center" : ""}`}>
-        <Power size={32} style={{ color: COLORS.gold }} className="animate-pulse flex-shrink-0" />
-        {!isCollapsed && (
-          <div className="flex flex-col">
-            <span className="text-3xl font-bold leading-tight">Muscat Bay</span>
-            <span className="text-lg font-medium opacity-90 -mt-1">Assets & Operation</span>
-          </div>
-        )}
+      <div className={cn(
+        "text-3xl font-bold flex items-center space-x-3 text-white",
+        isCollapsed ? 'justify-center' : ''
+      )}>
+        <Power 
+          size={32} 
+          style={{ color: COLORS.primaryLight }} 
+          className="animate-pulse flex-shrink-0"
+        /> 
+        {!isCollapsed && <span>Muscat Bay OMS</span>}
       </div>
 
       {/* Navigation */}
       <nav className="space-y-2">
-        {mainSections.map((section) => (
-          <button
-            key={section.sectionId}
-            onClick={() => setActiveMainSection(section.sectionId)}
-            style={
-              section.sectionId === activeMainSection
-                ? { backgroundColor: COLORS.teal, color: COLORS.navy }
-                : { color: "white" }
-            }
-            className={`w-full flex items-center ${isCollapsed ? "justify-center" : "space-x-3"} p-3 rounded-lg transition-all duration-200 ease-in-out group hover:text-white relative`}
-            onMouseOver={(e) => {
-              if (section.sectionId !== activeMainSection) {
-                e.currentTarget.style.backgroundColor = hoverBg
-                e.currentTarget.style.color = "white"
-              }
-            }}
-            onMouseOut={(e) => {
-              if (section.sectionId !== activeMainSection) {
-                e.currentTarget.style.backgroundColor = "transparent"
-                e.currentTarget.style.color = "white"
-              } else {
-                e.currentTarget.style.backgroundColor = COLORS.teal
-                e.currentTarget.style.color = COLORS.navy
-              }
-            }}
-            title={isCollapsed ? section.name : ""}
-          >
-            <section.icon
-              size={22}
-              className={`group-hover:scale-110 transition-transform flex-shrink-0`}
-              style={{ color: section.sectionId === activeMainSection ? COLORS.navy : "white" }}
-            />
-            {!isCollapsed && <span className="font-medium">{section.name}</span>}
-          </button>
-        ))}
+        {MAIN_SECTIONS.map(section => {
+          const IconComponent = getIcon(section.icon);
+          const isActive = section.id === activeMainSection;
+          
+          return (
+            <button
+              key={section.id}
+              onClick={() => setActiveMainSection(section.id)}
+              className={cn(
+                "w-full flex items-center p-3 rounded-lg transition-all duration-200 ease-in-out group hover:text-white relative",
+                isCollapsed ? 'justify-center' : 'space-x-3',
+                isActive ? 'text-white' : 'text-white'
+              )}
+              style={isActive ? { backgroundColor: COLORS.primary, color: 'white' } : {color: 'white'}}
+              onMouseOver={(e) => { 
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = COLORS.primaryLight; 
+                  e.currentTarget.style.color = 'white'; 
+                }
+              }}
+              onMouseOut={(e) => { 
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent'; 
+                  e.currentTarget.style.color = 'white';
+                }
+              }}
+              title={isCollapsed ? section.name : ''}
+            >
+              <IconComponent 
+                size={22} 
+                className="group-hover:scale-110 transition-transform text-white flex-shrink-0" 
+              />
+              {!isCollapsed && <span className="font-medium">{section.name}</span>}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Footer */}
       {!isCollapsed && (
-        <div
-          className="mt-auto p-4 bg-slate-700 bg-opacity-30 rounded-lg text-center border"
-          style={{ borderColor: COLORS.gold }}
+        <div 
+          className="mt-auto p-4 bg-slate-700 bg-opacity-30 rounded-lg text-center border" 
+          style={{borderColor: COLORS.primaryLight}}
         >
-          <p className="text-sm" style={{ color: COLORS.gold }}>
+          <p className="text-sm" style={{color: COLORS.primaryLight}}>
             Operations Management Suite
           </p>
-          <button
+          <button 
             className="mt-3 w-full text-white py-2.5 px-4 rounded-lg text-sm font-semibold shadow-lg transition-all"
-            style={{ backgroundColor: COLORS.dominant }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = COLORS.primaryDark)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = COLORS.dominant)}
+            style={{ backgroundColor: COLORS.primary }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.primaryDark} 
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = COLORS.primary}
           >
             Global Settings
           </button>
         </div>
       )}
     </div>
-  )
-}
+  );
+};
